@@ -11,37 +11,43 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// NoSQLDatabase contains handler data for a single NoSQLDatabase
-type NoSQLDatabase struct {
+// VirtualMachine contains handler data for a single VirtualMachine
+type VirtualMachine struct {
 	logger     logs.Logger
 	connection data.Connection
 }
 
-// NewNoSQLDatabase creates a new NoSQLDatabase
-func NewNoSQLDatabase(logger logs.Logger, connection data.Connection) *NoSQLDatabase {
-	return &NoSQLDatabase{logger, connection}
+type createVirtualMachineRequestBody struct {
+	Name     string `json:"name" validate:"required,min=5,max=200"`
+	Cpus     uint   `json:"cpus" validate:"required,gte=1,lte=64"`
+	Quantity int    `json:"quantity" validate:"required,gte=1,lte=500"`
+}
+
+// NewVirtualMachine creates a new VirtualMachine
+func NewVirtualMachine(logger logs.Logger, connection data.Connection) *VirtualMachine {
+	return &VirtualMachine{logger, connection}
 }
 
 // ServeHTTP handles fetching all resources available
-func (l *NoSQLDatabase) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+func (l *VirtualMachine) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	http.NotFound(rw, r)
 }
 
-// GetNoSQLDatabases handles fetching all NoSQLDatabases
-func (l *NoSQLDatabase) GetNoSQLDatabases(userID string, rw http.ResponseWriter, r *http.Request) {
-	l.logger.Info(newLog("Get NoSQL databases request made at %s", r.URL.String()))
+// GetVirtualMachines handles fetching all VirtualMachines
+func (l *VirtualMachine) GetVirtualMachines(userID string, rw http.ResponseWriter, r *http.Request) {
+	l.logger.Info(newLog("Get virtual machines request made at %s", r.URL.String()))
 
-	res, err := l.connection.GetNoSQLDatabases(userID, nil)
+	res, err := l.connection.GetVirtualMachines(userID, nil)
 	if err != nil {
-		l.logger.Warning(newLog("Unable to find NoSQL databases: %s", err.Error()))
-		http.Error(rw, "Unable to find NoSQL databases", http.StatusInternalServerError)
+		l.logger.Warning(newLog("Unable to find virtual machines: %s", err.Error()))
+		http.Error(rw, "Unable to find virtual machines", http.StatusInternalServerError)
 		return
 	}
 
 	data, err := res.ToJSON()
 	if err != nil {
-		l.logger.Error(newLog("Failed to parse NoSQL databases to JSON: %s", err.Error()))
-		http.Error(rw, "Failed to correctly parse NoSQL databases to JSON", http.StatusInternalServerError)
+		l.logger.Error(newLog("Failed to parse virtual machines to JSON: %s", err.Error()))
+		http.Error(rw, "Failed to correctly parse virtual machines to JSON", http.StatusInternalServerError)
 		return
 	}
 
@@ -49,34 +55,34 @@ func (l *NoSQLDatabase) GetNoSQLDatabases(userID string, rw http.ResponseWriter,
 	rw.Write(data)
 }
 
-// GetNoSQLDatabase handles fetching a single NoSQLDatabase
-func (l *NoSQLDatabase) GetNoSQLDatabase(userID string, rw http.ResponseWriter, r *http.Request) {
-	l.logger.Info(newLog("Get NoSQL databases request made at %s", r.URL.String()))
+// GetVirtualMachine handles fetching a single VirtualMachine
+func (l *VirtualMachine) GetVirtualMachine(userID string, rw http.ResponseWriter, r *http.Request) {
+	l.logger.Info(newLog("Get virtual machines request made at %s", r.URL.String()))
 
 	vars := mux.Vars(r)
 	ID := vars["id"]
 
-	res, err := l.connection.GetNoSQLDatabases(userID, &ID)
+	res, err := l.connection.GetVirtualMachines(userID, &ID)
 	if err != nil {
-		l.logger.Warning(newLog("Error finding NoSQL database user: %s ID: %s error: %s", userID, ID, err.Error()))
-		http.Error(rw, fmt.Sprintf("Unable to find NoSQL database %s", ID), http.StatusInternalServerError)
+		l.logger.Warning(newLog("Error finding virtual machine user: %s ID: %s error: %s", userID, ID, err.Error()))
+		http.Error(rw, fmt.Sprintf("Unable to find virtual machine %s", ID), http.StatusInternalServerError)
 		return
 	}
 
-	db := model.NoSQLDatabase{}
+	vm := model.VirtualMachine{}
 
 	if len(res) > 0 {
-		db = res[0]
+		vm = res[0]
 	} else {
-		l.logger.Info(newLog("Unable to find NoSQL database %s", ID))
-		http.Error(rw, "Failed to find NoSQL database", http.StatusNotFound)
+		l.logger.Info(newLog("Unable to find virtual machine %s", ID))
+		http.Error(rw, "Failed to find virtual machine", http.StatusNotFound)
 		return
 	}
 
-	data, err := db.ToJSON()
+	data, err := vm.ToJSON()
 	if err != nil {
-		l.logger.Error(newLog("Failed to parse NoSQL database to JSON: %s", err.Error()))
-		http.Error(rw, "Failed to correctly parse NoSQL database to JSON", http.StatusInternalServerError)
+		l.logger.Error(newLog("Failed to parse virtual machine to JSON: %s", err.Error()))
+		http.Error(rw, "Failed to correctly parse virtual machine to JSON", http.StatusInternalServerError)
 		return
 	}
 
@@ -84,11 +90,11 @@ func (l *NoSQLDatabase) GetNoSQLDatabase(userID string, rw http.ResponseWriter, 
 	rw.Write(data)
 }
 
-// CreateNoSQLDatabase handles creating a new NoSQLDatabase
-func (l *NoSQLDatabase) CreateNoSQLDatabase(userID string, rw http.ResponseWriter, r *http.Request) {
-	l.logger.Info(newLog("Create NoSQL database request made at %s", r.URL.String()))
+// CreateVirtualMachine handles creating a new VirtualMachine
+func (l *VirtualMachine) CreateVirtualMachine(userID string, rw http.ResponseWriter, r *http.Request) {
+	l.logger.Info(newLog("Create virtual machine request made at %s", r.URL.String()))
 
-	body := model.NoSQLDatabase{}
+	body := model.VirtualMachine{}
 
 	err := json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
@@ -97,18 +103,18 @@ func (l *NoSQLDatabase) CreateNoSQLDatabase(userID string, rw http.ResponseWrite
 		return
 	}
 
-	created, err := l.connection.CreateNoSQLDatabase(userID, body)
+	created, err := l.connection.CreateVirtualMachine(userID, body)
 
 	if err != nil {
-		l.logger.Warning(newLog("Unable to create NoSQL database: %s", err.Error()))
-		http.Error(rw, "Unable to create NoSQL database", http.StatusInternalServerError)
+		l.logger.Warning(newLog("Unable to create virtual machine: %s", err.Error()))
+		http.Error(rw, "Unable to create virtual machine", http.StatusInternalServerError)
 		return
 	}
 
 	data, err := created.ToJSON()
 	if err != nil {
-		l.logger.Error(newLog("Failed to parse NoSQL database to JSON: %s", err.Error()))
-		http.Error(rw, "Failed to correctly parse NoSQL database to JSON", http.StatusInternalServerError)
+		l.logger.Error(newLog("Failed to parse virtual machine to JSON: %s", err.Error()))
+		http.Error(rw, "Failed to correctly parse virtual machine to JSON", http.StatusInternalServerError)
 		return
 	}
 
@@ -116,14 +122,14 @@ func (l *NoSQLDatabase) CreateNoSQLDatabase(userID string, rw http.ResponseWrite
 	rw.Write(data)
 }
 
-// UpdateNoSQLDatabase handles updating an existing NoSQLDatabase
-func (l *NoSQLDatabase) UpdateNoSQLDatabase(userID string, rw http.ResponseWriter, r *http.Request) {
-	l.logger.Info(newLog("Update NoSQL database request made at %s", r.URL.String()))
+// UpdateVirtualMachine handles updating an existing VirtualMachine
+func (l *VirtualMachine) UpdateVirtualMachine(userID string, rw http.ResponseWriter, r *http.Request) {
+	l.logger.Info(newLog("Update virtual machine request made at %s", r.URL.String()))
 
 	vars := mux.Vars(r)
 	ID := vars["id"]
 
-	body := model.NoSQLDatabase{}
+	body := model.VirtualMachine{}
 
 	err := json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
@@ -132,18 +138,18 @@ func (l *NoSQLDatabase) UpdateNoSQLDatabase(userID string, rw http.ResponseWrite
 		return
 	}
 
-	created, err := l.connection.UpdateNoSQLDatabase(userID, ID, body)
+	created, err := l.connection.UpdateVirtualMachine(userID, ID, body)
 
 	if err != nil {
-		l.logger.Warning(newLog("Unable to update NoSQL database: %s", err.Error()))
-		http.Error(rw, "Unable to update NoSQL database", http.StatusInternalServerError)
+		l.logger.Warning(newLog("Unable to update virtual machine: %s", err.Error()))
+		http.Error(rw, "Unable to update virtual machine", http.StatusInternalServerError)
 		return
 	}
 
 	data, err := created.ToJSON()
 	if err != nil {
-		l.logger.Error(newLog("Failed to parse NoSQL database to JSON: %s", err.Error()))
-		http.Error(rw, "Failed to correctly parse NoSQL database to JSON", http.StatusInternalServerError)
+		l.logger.Error(newLog("Failed to parse virtual machine to JSON: %s", err.Error()))
+		http.Error(rw, "Failed to correctly parse virtual machine to JSON", http.StatusInternalServerError)
 		return
 	}
 
@@ -151,22 +157,22 @@ func (l *NoSQLDatabase) UpdateNoSQLDatabase(userID string, rw http.ResponseWrite
 	rw.Write(data)
 }
 
-// DeleteNoSQLDatabase handles deleting an existing NoSQLDatabase
-func (l *NoSQLDatabase) DeleteNoSQLDatabase(userID string, rw http.ResponseWriter, r *http.Request) {
-	l.logger.Info(newLog("Delete NoSQL database request made at %s", r.URL.String()))
+// DeleteVirtualMachine handles deleting an existing VirtualMachine
+func (l *VirtualMachine) DeleteVirtualMachine(userID string, rw http.ResponseWriter, r *http.Request) {
+	l.logger.Info(newLog("Delete virtual machine request made at %s", r.URL.String()))
 
 	vars := mux.Vars(r)
 	ID := vars["id"]
 
-	err := l.connection.DeleteNoSQLDatabase(userID, ID)
+	err := l.connection.DeleteVirtualMachine(userID, ID)
 
 	if err != nil {
-		l.logger.Warning(newLog("Unable to delete NoSQL database: %s", err.Error()))
-		http.Error(rw, "Unable to delete NoSQL database", http.StatusInternalServerError)
+		l.logger.Warning(newLog("Unable to delete virtual machine: %s", err.Error()))
+		http.Error(rw, "Unable to delete virtual machine", http.StatusInternalServerError)
 		return
 	}
 
 	rw.Header().Set("Content-Type", "text/plain")
-	fmt.Fprintf(rw, "%s", "NoSQL database deleted")
+	fmt.Fprintf(rw, "%s", "virtual machine deleted")
 
 }

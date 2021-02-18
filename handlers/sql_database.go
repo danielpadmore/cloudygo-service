@@ -17,6 +17,13 @@ type SQLDatabase struct {
 	connection data.Connection
 }
 
+type createSQLDatabaseRequestBody struct {
+	Name     string `json:"name"  validate:"required,min=5,max=200"`
+	Username string `json:"username"  validate:"required,min=5,max=50"`
+	Password string `json:"-" validate:"required,min=8,max=200"`
+	Quantity int    `json:"quantity" validate:"required,gte=1,lte=50"`
+}
+
 // NewSQLDatabase creates a new SQLDatabase
 func NewSQLDatabase(logger logs.Logger, connection data.Connection) *SQLDatabase {
 	return &SQLDatabase{logger, connection}

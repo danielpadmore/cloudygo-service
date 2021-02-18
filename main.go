@@ -10,10 +10,14 @@ import (
 	"github.com/danielpadmore/cloudygo-service/data"
 	"github.com/danielpadmore/cloudygo-service/handlers"
 	"github.com/danielpadmore/cloudygo-service/logs"
+	"github.com/danielpadmore/cloudygo-service/validation"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	"github.com/nicholasjackson/env"
 )
+
+// TODO - consistent logs
+// TODO - tests
 
 // Config contains configuration data for the application
 type Config struct {
@@ -53,53 +57,18 @@ func main() {
 	}
 	defer c.Close()
 
-	db, err := retryDbUntilReady(&logger)
+	validator := validation.New(logger)
+
+	db, err := retryDbUntilReady(logger)
 	if err != nil {
 		logger.Fatal(newLog("Timed out waiting for database connection"))
 		os.Exit(1)
 	}
 
 	router := mux.NewRouter()
+	registerRoutes(router, logger, validator, db)
 
-	healthHandler := handlers.NewHealth(&logger, db)
-	router.Handle("/health", healthHandler).Methods("GET")
-
-	resourceHandler := handlers.NewResource(&logger, db)
-	router.Handle("/resources", resourceHandler).Methods("GET")
-
-	userHandler := handlers.NewUser(&logger, db)
-	router.HandleFunc("/register", userHandler.Register).Methods("POST")
-	router.HandleFunc("/signin", userHandler.SignIn).Methods("POST")
-
-	lambdaHandler := handlers.NewLambda(&logger, db)
-	router.Handle("/lambdas", isAuthorizedMiddleware(lambdaHandler.CreateLambda)).Methods("POST")
-	router.Handle("/lambdas", isAuthorizedMiddleware(lambdaHandler.GetLambdas)).Methods("GET")
-	router.Handle("/lambdas/{id}", isAuthorizedMiddleware(lambdaHandler.GetLambda)).Methods("GET")
-	router.Handle("/lambdas/{id}", isAuthorizedMiddleware(lambdaHandler.UpdateLambda)).Methods("PUT")
-	router.Handle("/lambdas/{id}", isAuthorizedMiddleware(lambdaHandler.DeleteLambda)).Methods("DELETE")
-
-	vmHandler := handlers.NewVirtualMachine(&logger, db)
-	router.Handle("/virtual-machines", isAuthorizedMiddleware(vmHandler.CreateVirtualMachine)).Methods("POST")
-	router.Handle("/virtual-machines", isAuthorizedMiddleware(vmHandler.GetVirtualMachines)).Methods("GET")
-	router.Handle("/virtual-machines/{id}", isAuthorizedMiddleware(vmHandler.GetVirtualMachine)).Methods("GET")
-	router.Handle("/virtual-machines/{id}", isAuthorizedMiddleware(vmHandler.UpdateVirtualMachine)).Methods("PUT")
-	router.Handle("/virtual-machines/{id}", isAuthorizedMiddleware(vmHandler.DeleteVirtualMachine)).Methods("DELETE")
-
-	sqldbHandler := handlers.NewSQLDatabase(&logger, db)
-	router.Handle("/sql-databases", isAuthorizedMiddleware(sqldbHandler.CreateSQLDatabase)).Methods("POST")
-	router.Handle("/sql-databases", isAuthorizedMiddleware(sqldbHandler.GetSQLDatabases)).Methods("GET")
-	router.Handle("/sql-databases/{id}", isAuthorizedMiddleware(sqldbHandler.GetSQLDatabase)).Methods("GET")
-	router.Handle("/sql-databases/{id}", isAuthorizedMiddleware(sqldbHandler.UpdateSQLDatabase)).Methods("PUT")
-	router.Handle("/sql-databases/{id}", isAuthorizedMiddleware(sqldbHandler.DeleteSQLDatabase)).Methods("DELETE")
-
-	nosqldbHandler := handlers.NewNoSQLDatabase(&logger, db)
-	router.Handle("/nosql-databases", isAuthorizedMiddleware(nosqldbHandler.CreateNoSQLDatabase)).Methods("POST")
-	router.Handle("/nosql-databases", isAuthorizedMiddleware(nosqldbHandler.GetNoSQLDatabases)).Methods("GET")
-	router.Handle("/nosql-databases/{id}", isAuthorizedMiddleware(nosqldbHandler.GetNoSQLDatabase)).Methods("GET")
-	router.Handle("/nosql-databases/{id}", isAuthorizedMiddleware(nosqldbHandler.UpdateNoSQLDatabase)).Methods("PUT")
-	router.Handle("/nosql-databases/{id}", isAuthorizedMiddleware(nosqldbHandler.DeleteNoSQLDatabase)).Methods("DELETE")
-
-	logger.Info(newLog("Routing configured, starting server on %s", conf.BindAddress))
+	logger.Info(newLog("Starting server on %s", conf.BindAddress))
 	err = http.ListenAndServe(conf.BindAddress, router)
 	if err != nil {
 		logger.Fatal(newLog("Unable to start server on %s. Error: %s", conf.BindAddress, err.Error()))
@@ -165,4 +134,54 @@ func retryDbUntilReady(logger logs.Logger) (data.Connection, error) {
 
 		time.Sleep(dt)
 	}
+}
+
+func registerRoutes(router *mux.Router, logger logs.Logger, validator validation.Validator, db data.Connection) {
+
+	logger.Debug(newLog("Registering routes"))
+
+	healthHandler := handlers.NewHealth(logger, db)
+	router.Handle("/health", healthHandler).Methods("GET")
+
+	resourceHandler := handlers.NewResource(logger, db)
+	router.Handle("/resources", resourceHandler).Methods("GET")
+
+	userHandler := handlers.NewUser(logger, db)
+	router.HandleFunc("/register", userHandler.Register).Methods("POST")
+	router.HandleFunc("/signin", userHandler.SignIn).Methods("POST")
+
+	lambdaHandler := handlers.NewLambda(logger, validator, db)
+	lambdaRouter := router.PathPrefix("/lambdas").Subrouter()
+	lambdaRouter.Handle("", isAuthorizedMiddleware(lambdaHandler.CreateLambda)).Methods("POST")
+	lambdaRouter.Handle("", isAuthorizedMiddleware(lambdaHandler.GetLambdas)).Methods("GET")
+	lambdaRouter.Handle("/{id}", isAuthorizedMiddleware(lambdaHandler.GetLambda)).Methods("GET")
+	lambdaRouter.Handle("/{id}", isAuthorizedMiddleware(lambdaHandler.UpdateLambda)).Methods("PUT")
+	lambdaRouter.Handle("/{id}", isAuthorizedMiddleware(lambdaHandler.DeleteLambda)).Methods("DELETE")
+
+	vmHandler := handlers.NewVirtualMachine(logger, db)
+	vmRouter := router.PathPrefix("/virtual-machines").Subrouter()
+	vmRouter.Handle("", isAuthorizedMiddleware(vmHandler.CreateVirtualMachine)).Methods("POST")
+	vmRouter.Handle("", isAuthorizedMiddleware(vmHandler.GetVirtualMachines)).Methods("GET")
+	vmRouter.Handle("/{id}", isAuthorizedMiddleware(vmHandler.GetVirtualMachine)).Methods("GET")
+	vmRouter.Handle("/{id}", isAuthorizedMiddleware(vmHandler.UpdateVirtualMachine)).Methods("PUT")
+	vmRouter.Handle("/{id}", isAuthorizedMiddleware(vmHandler.DeleteVirtualMachine)).Methods("DELETE")
+
+	sqldbHandler := handlers.NewSQLDatabase(logger, db)
+	sqldbRouter := router.PathPrefix("/sql-databases").Subrouter()
+	sqldbRouter.Handle("", isAuthorizedMiddleware(sqldbHandler.CreateSQLDatabase)).Methods("POST")
+	sqldbRouter.Handle("", isAuthorizedMiddleware(sqldbHandler.GetSQLDatabases)).Methods("GET")
+	sqldbRouter.Handle("/{id}", isAuthorizedMiddleware(sqldbHandler.GetSQLDatabase)).Methods("GET")
+	sqldbRouter.Handle("/{id}", isAuthorizedMiddleware(sqldbHandler.UpdateSQLDatabase)).Methods("PUT")
+	sqldbRouter.Handle("/{id}", isAuthorizedMiddleware(sqldbHandler.DeleteSQLDatabase)).Methods("DELETE")
+
+	nosqldbHandler := handlers.NewNoSQLDatabase(logger, db)
+	nosqldbRouter := router.PathPrefix("/nosql-databases").Subrouter()
+	nosqldbRouter.Handle("", isAuthorizedMiddleware(nosqldbHandler.CreateNoSQLDatabase)).Methods("POST")
+	nosqldbRouter.Handle("", isAuthorizedMiddleware(nosqldbHandler.GetNoSQLDatabases)).Methods("GET")
+	nosqldbRouter.Handle("/{id}", isAuthorizedMiddleware(nosqldbHandler.GetNoSQLDatabase)).Methods("GET")
+	nosqldbRouter.Handle("/{id}", isAuthorizedMiddleware(nosqldbHandler.UpdateNoSQLDatabase)).Methods("PUT")
+	nosqldbRouter.Handle("/{id}", isAuthorizedMiddleware(nosqldbHandler.DeleteNoSQLDatabase)).Methods("DELETE")
+
+	logger.Debug(newLog("Routes registered"))
+
 }

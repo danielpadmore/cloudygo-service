@@ -8,18 +8,25 @@ import (
 	"github.com/danielpadmore/cloudygo-service/data"
 	"github.com/danielpadmore/cloudygo-service/logs"
 	"github.com/danielpadmore/cloudygo-service/model"
+	"github.com/danielpadmore/cloudygo-service/validation"
 	"github.com/gorilla/mux"
 )
 
 // Lambda contains handler data for a single Lambda
 type Lambda struct {
 	logger     logs.Logger
+	val        validation.Validator
 	connection data.Connection
 }
 
+type createLambdaRequestBody struct {
+	Name            string `json:"name" validate:"required,min=5,max=200"`
+	ConcurrentLimit uint   `json:"concurrent_limit" validate:"required,gte=1,lte=200"`
+}
+
 // NewLambda creates a new Lambda
-func NewLambda(logger logs.Logger, connection data.Connection) *Lambda {
-	return &Lambda{logger, connection}
+func NewLambda(logger logs.Logger, val validation.Validator, connection data.Connection) *Lambda {
+	return &Lambda{logger, val, connection}
 }
 
 // ServeHTTP handles fetching all resources available
@@ -88,13 +95,25 @@ func (l *Lambda) GetLambda(userID string, rw http.ResponseWriter, r *http.Reques
 func (l *Lambda) CreateLambda(userID string, rw http.ResponseWriter, r *http.Request) {
 	l.logger.Info(newLog("Create lambdas request made at %s", r.URL.String()))
 
-	body := model.Lambda{}
+	input := createLambdaRequestBody{}
 
-	err := json.NewDecoder(r.Body).Decode(&body)
+	err := json.NewDecoder(r.Body).Decode(&input)
 	if err != nil {
 		l.logger.Info(newLog("Unable to parse request body: %s", err.Error()))
 		http.Error(rw, "Unable to parse request body", http.StatusBadRequest)
 		return
+	}
+
+	if err := l.val.Validate.Struct(input); err != nil {
+		msg := l.val.ConcatReasons(err)
+		l.logger.Info(newLog("Invalid create request made. Reasons: %s", msg))
+		http.Error(rw, msg, http.StatusBadRequest)
+		return
+	}
+
+	body := model.Lambda{
+		Name:            input.Name,
+		ConcurrentLimit: input.ConcurrentLimit,
 	}
 
 	created, err := l.connection.CreateLambda(userID, body)
@@ -123,13 +142,25 @@ func (l *Lambda) UpdateLambda(userID string, rw http.ResponseWriter, r *http.Req
 	vars := mux.Vars(r)
 	ID := vars["id"]
 
-	body := model.Lambda{}
+	input := model.Lambda{}
 
-	err := json.NewDecoder(r.Body).Decode(&body)
+	err := json.NewDecoder(r.Body).Decode(&input)
 	if err != nil {
 		l.logger.Info(newLog("Unable to parse request body: %s", err.Error()))
 		http.Error(rw, "Unable to parse request body", http.StatusBadRequest)
 		return
+	}
+
+	if err := l.val.Validate.Struct(input); err != nil {
+		msg := l.val.ConcatReasons(err)
+		l.logger.Info(newLog("Invalid update request made. Reasons: %s", msg))
+		http.Error(rw, msg, http.StatusBadRequest)
+		return
+	}
+
+	body := model.Lambda{
+		Name:            input.Name,
+		ConcurrentLimit: input.ConcurrentLimit,
 	}
 
 	created, err := l.connection.UpdateLambda(userID, ID, body)

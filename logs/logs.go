@@ -80,7 +80,7 @@ type StdLogger struct {
 }
 
 // NewStdLogger creates a new StdLogger instance
-func NewStdLogger(level int) StdLogger {
+func NewStdLogger(level int) *StdLogger {
 	var (
 		fatal   = stdlog.New(os.Stderr, "", stdlog.Ldate|stdlog.Ltime)
 		error   = stdlog.New(os.Stderr, "", stdlog.Ldate|stdlog.Ltime)
@@ -90,7 +90,7 @@ func NewStdLogger(level int) StdLogger {
 		verbose = stdlog.New(os.Stdout, "", stdlog.Ldate|stdlog.Ltime)
 	)
 
-	return StdLogger{level, fatal, error, warning, info, debug, verbose}
+	return &StdLogger{level, fatal, error, warning, info, debug, verbose}
 }
 
 // SetLevel updates logger level
